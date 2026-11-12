@@ -64,11 +64,26 @@ const tabSoon = document.getElementById("tab-soon");
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt = d => d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" });
 
+// If an image fails to load, try the next source; if none work, show a plain block.
+function nextImg(el) {
+  let rest = [];
+  try { rest = JSON.parse(el.dataset.next || "[]"); } catch (e) {}
+  if (rest.length) {
+    el.dataset.next = JSON.stringify(rest.slice(1));
+    el.src = rest[0];
+  } else {
+    el.onerror = null;
+    const box = document.createElement("div");
+    box.className = "noimg";
+    el.replaceWith(box);
+  }
+}
+
 function card({ title, date, img, score, meta, price }) {
   return `
     <div class="col-12 col-sm-6 col-lg-4">
       <article class="game">
-        ${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : `<div class="noimg"></div>`}
+        ${img && img.length ? `<img src="${esc(img[0])}" data-next='${esc(JSON.stringify(img.slice(1)))}' alt="" loading="lazy" referrerpolicy="no-referrer" onerror="nextImg(this)">` : `<div class="noimg"></div>`}
         <div class="body">
           ${score ? `<span class="score" title="Metacritic">${score}</span>` : ""}
           <h2>${esc(title)}</h2>
@@ -108,7 +123,11 @@ async function showNew() {
     grid.innerHTML = games.map(d => card({
       title: d.title,
       date: fmt(new Date(d.releaseDate * 1000)),
-      img: `https://cdn.cloudflare.steamstatic.com/steam/apps/${d.steamAppID}/header.jpg`,
+      img: [
+        `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${d.steamAppID}/header.jpg`,
+        `https://cdn.cloudflare.steamstatic.com/steam/apps/${d.steamAppID}/header.jpg`,
+        d.thumb
+      ].filter(Boolean),
       score: Number(d.metacriticScore) || "",
       price: d.savings > 1
         ? `<div class="price"><span class="off">-${Math.round(d.savings)}%</span><span class="amt"><s>$${d.normalPrice}</s><span class="now">$${d.salePrice}</span></span></div>`
