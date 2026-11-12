@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game releases</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  :root { --bg:#1b2838; --bar:#171a21; --panel:#16202d; --edge:#2a475e; --blue:#66c0f4; --text:#c7d5e0; --mute:#8f98a0; --green:#a4d007; --greenbg:#4c6b22; }
+  body { font-family:"Motiva Sans",Arial,Helvetica,sans-serif; color:var(--text);
+         background:linear-gradient(to bottom,var(--bar) 0,var(--bg) 320px) var(--bg) no-repeat; min-height:100vh; }
+  h1 { font-weight:300; font-size:clamp(2rem,6vw,3.25rem); color:#fff; letter-spacing:.01em; line-height:1.1; }
+  a { color:var(--blue); }
+  .tabs .btn { border:0; border-radius:2px; font-weight:400; color:var(--blue); background:rgba(103,193,245,.2); padding:.5rem 1.1rem; }
+  .tabs .btn:hover { color:#fff; background:linear-gradient(to right,#47bfff 5%,#1a44c2 95%); }
+  .tabs .btn.active { color:#fff; background:linear-gradient(to right,#47bfff 5%,#1a44c2 95%); }
+  .game { background:var(--panel); border:1px solid var(--edge); border-radius:2px; height:100%; display:flex; flex-direction:column; }
+  .game img, .game .noimg { width:100%; aspect-ratio:460/215; object-fit:cover; background:var(--bar); }
+  .game .body { padding:.9rem 1rem 1rem; flex:1; display:flex; flex-direction:column; }
+  .game h2 { font-size:1.05rem; font-weight:400; color:#fff; margin:0 0 .25rem; }
+  .date { color:var(--mute); font-size:.85rem; }
+  .meta { color:var(--mute); font-size:.85rem; margin-top:.5rem; }
+  .score { float:right; margin-left:.5rem; background:#66a31a; color:#fff; font-weight:700; font-size:.85rem; padding:.1rem .45rem; border-radius:2px; }
+  .price { margin-top:auto; padding-top:.75rem; display:flex; justify-content:flex-end; align-items:stretch; }
+  .price .off { background:var(--greenbg); color:var(--green); font-size:1.1rem; font-weight:700; padding:.2rem .5rem; }
+  .price .amt { background:rgba(0,0,0,.2); color:var(--text); padding:.2rem .6rem; display:flex; align-items:center; }
+  .price .amt s { color:var(--mute); font-size:.75rem; margin-right:.4rem; }
+  .price .amt .now { color:var(--green); }
+  .msg { border:1px solid var(--edge); padding:1.5rem; background:var(--panel); border-radius:2px; }
+  :focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+</style>
+</head>
+<body>
+<main class="container py-5">
+  <h1 class="mb-4">What's out, and what's next</h1>
+
+  <div class="tabs d-flex gap-2 mb-4">
+    <button class="btn active" id="tab-new">Just released (live)</button>
+    <button class="btn" id="tab-soon">Coming up</button>
+  </div>
+
+  <div id="status" class="msg d-none" role="status"></div>
+  <div id="grid" class="row g-4"></div>
+  <p class="meta mt-5" id="source"></p>
+</main>
+
+<script>
+// Hand-picked snapshot for the "Coming up" tab, as of Nov 12, 2026.
+// Release dates move, so double-check before relying on them.
+const COMING_UP = [
+  { name:"Metaphor: ReFantazio (Switch 2)", date:"2026-11-12", platforms:"Switch 2" },
+  { name:"Grand Theft Auto VI", date:"2026-11-19", platforms:"PS5, Xbox Series X|S" },
+  { name:"Warhammer Survivors", date:"2026-11-10", platforms:"PC, PS5, Xbox, Switch, Switch 2" },
+  { name:"Crymelight", date:"2026-11-05", platforms:"PC, PS5, Switch 2" },
+  { name:"The Legend of Zelda: Ocarina of Time", date:"2026-11-05", platforms:"Switch 2" },
+];
+
+const grid = document.getElementById("grid");
+const status = document.getElementById("status");
+const source = document.getElementById("source");
+const tabNew = document.getElementById("tab-new");
+const tabSoon = document.getElementById("tab-soon");
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = d => d.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" });
+
+function card({ title, date, img, score, meta, price }) {
+  return `
+    <div class="col-12 col-sm-6 col-lg-4">
+      <article class="game">
+        ${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : `<div class="noimg"></div>`}
+        <div class="body">
+          ${score ? `<span class="score" title="Metacritic">${score}</span>` : ""}
+          <h2>${esc(title)}</h2>
+          <span class="date">${date}</span>
+          ${meta ? `<div class="meta">${esc(meta)}</div>` : ""}
+          ${price || ""}
+        </div>
+      </article>
+    </div>`;
+}
+
+function setActive(tab) {
+  tabNew.classList.toggle("active", tab === "new");
+  tabSoon.classList.toggle("active", tab === "soon");
+  status.classList.add("d-none");
+}
+
+// Live data: CheapShark's public API needs no key.
+async function showNew() {
+  setActive("new");
+  grid.innerHTML = "";
+  source.innerHTML = 'Live data from <a href="https://apidocs.cheapshark.com/">CheapShark</a>, PC games on Steam, newest first.';
+  status.textContent = "Loading games…";
+  status.classList.remove("d-none");
+  try {
+    const res = await fetch("https://www.cheapshark.com/api/1.0/deals?storeID=1&sortBy=Release&desc=1&pageSize=60");
+    if (!res.ok) throw new Error("The API returned " + res.status + ".");
+    const deals = await res.json();
+    const seen = new Set(), now = Date.now() / 1000;
+    const games = deals.filter(d => {
+      if (d.releaseDate > now || seen.has(d.steamAppID)) return false;
+      seen.add(d.steamAppID);
+      return true;
+    }).slice(0, 18);
+    if (!games.length) throw new Error("No games came back.");
+    status.classList.add("d-none");
+    grid.innerHTML = games.map(d => card({
+      title: d.title,
+      date: fmt(new Date(d.releaseDate * 1000)),
+      img: `https://cdn.cloudflare.steamstatic.com/steam/apps/${d.steamAppID}/header.jpg`,
+      score: Number(d.metacriticScore) || "",
+      price: d.savings > 1
+        ? `<div class="price"><span class="off">-${Math.round(d.savings)}%</span><span class="amt"><s>$${d.normalPrice}</s><span class="now">$${d.salePrice}</span></span></div>`
+        : `<div class="price"><span class="amt">$${d.salePrice}</span></div>`
+    })).join("");
+  } catch (err) {
+    status.textContent = "Couldn't load live games. " + err.message + " Check your connection and try again.";
+  }
+}
+
+function showSoon() {
+  setActive("soon");
+  source.textContent = "A hand-picked list, current as of Nov 12, 2026. Edit COMING_UP in the script to change it.";
+  const list = [...COMING_UP].sort((a, b) => a.date.localeCompare(b.date));
+  grid.innerHTML = list.map(g => card({
+    title: g.name, date: fmt(new Date(g.date + "T00:00")), meta: g.platforms
+  })).join("");
+}
+
+tabNew.onclick = showNew;
+tabSoon.onclick = showSoon;
+showNew();
+</script>
+</body>
+</html>
