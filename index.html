@@ -121,7 +121,6 @@ async function showNew() {
 
 function showSoon() {
   setActive("soon");
-  source.textContent = "A hand-picked list, current as of Nov 12, 2026. Edit COMING_UP in the script to change it.";
   const list = [...COMING_UP].sort((a, b) => a.date.localeCompare(b.date));
   grid.innerHTML = list.map(g => card({
     title: g.name, date: fmt(new Date(g.date + "T00:00")), meta: g.platforms
